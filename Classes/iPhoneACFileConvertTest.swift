@@ -141,13 +141,13 @@ class ACFileConvertAppDelegate: NSObject, UIApplicationDelegate {
             
             // add interruption handler
             NSNotificationCenter.defaultCenter().addObserver(self,
-                selector: "handleInterruption:",
+                selector: #selector(ACFileConvertAppDelegate.handleInterruption(_:)),
                 name: AVAudioSessionInterruptionNotification,
                 object: sessionInstance)
             
             // we don't do anything special in the route change notification
             NSNotificationCenter.defaultCenter().addObserver(self,
-                selector: "handleRouteChange:",
+                selector: #selector(ACFileConvertAppDelegate.handleRouteChange(_:)),
                 name: AVAudioSessionRouteChangeNotification,
                 object: sessionInstance)
             

@@ -182,13 +182,13 @@ class MyViewController: UIViewController, AVAudioPlayerDelegate {
         
         // add our custom flip buttons as the nav bars custom right view
         let infoButton = UIButton(type: .InfoLight)
-        infoButton.addTarget(self, action: "flipAction:", forControlEvents: .TouchUpInside)
+        infoButton.addTarget(self, action: #selector(MyViewController.flipAction(_:)), forControlEvents: .TouchUpInside)
         
         flipButton = UIBarButtonItem(customView: infoButton)
         self.navigationItem.rightBarButtonItem = flipButton
         
         // create our done button as the nav bar's custom right view for the flipped view (used later)
-        doneButton = UIBarButtonItem(barButtonSystemItem: .Done, target: self, action: "flipAction:")
+        doneButton = UIBarButtonItem(barButtonSystemItem: .Done, target: self, action: #selector(MyViewController.flipAction(_:)))
         
         // default output format
         // sample rate of 0 indicates source file sample rate
