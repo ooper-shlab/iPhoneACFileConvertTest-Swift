@@ -59,7 +59,7 @@ import Foundation
 class CAX4CCString {
     init(error: OSStatus) {
         // see if it appears to be a 4-char-code
-        var str: [CChar] = Array(count: 16, repeatedValue: 0)
+        var str: [CChar] = Array(repeating: 0, count: 16)
         str[1] = CChar((error >> 24) & 0xFF)
         str[2] = CChar((error >> 16) & 0xFF)
         str[3] = CChar((error >> 8) & 0xFF)
@@ -68,7 +68,7 @@ class CAX4CCString {
             str[0] = CChar("\'")
             str[5] = CChar("\'")
             str[6] = 0
-            mStr = String.fromCString(str)!
+            mStr = String(cString: str)
         } else if error > -200000 && error < 200000 {
             // no, format it as an integer
             mStr = String(Int32(error))
@@ -95,7 +95,7 @@ class CAXException: OOPException {
     }
     
     func formatError() -> String {
-        return self.dynamicType.formatError(mError)
+        return type(of: self).formatError(mError)
     }
     
     var mOperation: String
@@ -106,15 +106,15 @@ class CAXException: OOPException {
     typealias WarningHandler = (String, OSStatus) -> Void
     
     
-    class func formatError(error: OSStatus) -> String {
+    class func formatError(_ error: OSStatus) -> String {
         return CAX4CCString(error: error).get()
     }
     
-    class func warning(s: String, error: OSStatus) {
+    class func warning(_ s: String, error: OSStatus) {
         sWarningHandler?(s, error)
     }
     
-    class func setWarningHandler(f: WarningHandler) { sWarningHandler = f }
+    class func setWarningHandler(_ f: @escaping WarningHandler) { sWarningHandler = f }
     private static var sWarningHandler: WarningHandler? = nil
     
     override var description: String {
@@ -122,22 +122,22 @@ class CAXException: OOPException {
     }
 }
 
-func XThrowIfError(error: NSError?, _ operation: String) throws {
+func XThrowIfError(_ error: NSError?, _ operation: String) throws {
     if error != nil && error!.code != 0 {
         throw CAXException(operation: operation, err: OSStatus(error!.code))
     }
 }
-func XFailIfError(error: NSError?, _ operation: String) {
+func XFailIfError(_ error: NSError?, _ operation: String) {
     if error != nil && error!.code != 0 {
         XFailIfError(OSStatus(error!.code), operation)
     }
 }
-func XThrowIfError(error: OSStatus, _ operation: String) throws {
+func XThrowIfError(_ error: OSStatus, _ operation: String) throws {
     if error != 0 {
         throw CAXException(operation: operation, err: error)
     }
 }
-func XFailIfError(error: OSStatus, _ operation: String) {
+func XFailIfError(_ error: OSStatus, _ operation: String) {
     if error != 0 {
         fatalError(CAXException(operation: operation, err: error).description)
     }

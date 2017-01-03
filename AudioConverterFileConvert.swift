@@ -105,16 +105,16 @@ resume conversion after an interruption, you should not call AudioConverterFillC
 private var sStateLock: pthread_mutex_t = pthread_mutex_t()
 private var sStateChanged: pthread_cond_t = pthread_cond_t()      // signals when interruption thread unblocks conversion thread
 enum ThreadStates {
-    case Running
-    case Paused
-    case Done
+    case running
+    case paused
+    case done
 }
-var sState: ThreadStates = .Running
+var sState: ThreadStates = .running
 
 // initialize the thread state
 func ThreadStateInitalize() {
     
-    assert(NSThread.isMainThread())
+    assert(Thread.isMainThread)
     
     var rc = pthread_mutex_init(&sStateLock, nil)
     assert(rc == 0)
@@ -122,19 +122,19 @@ func ThreadStateInitalize() {
     rc = pthread_cond_init(&sStateChanged, nil)
     assert(rc == 0)
     
-    sState = .Done
+    sState = .done
 }
 
 // handle begin interruption - transition to kStatePaused
 func ThreadStateBeginInterruption() {
     
-    assert(NSThread.isMainThread())
+    assert(Thread.isMainThread)
     
     var rc = pthread_mutex_lock(&sStateLock)
     assert(rc == 0)
     
-    if sState == .Running {
-        sState = .Paused
+    if sState == .running {
+        sState = .paused
     }
     
     rc = pthread_mutex_unlock(&sStateLock)
@@ -144,13 +144,13 @@ func ThreadStateBeginInterruption() {
 // handle end interruption - transition to kStateRunning
 func ThreadStateEndInterruption() {
     
-    assert(NSThread.isMainThread())
+    assert(Thread.isMainThread)
     
     var rc = pthread_mutex_lock(&sStateLock)
     assert(rc == 0)
     
-    if sState == .Paused {
-        sState = .Running
+    if sState == .paused {
+        sState = .running
         
         rc = pthread_cond_signal(&sStateChanged)
         assert(rc == 0)
@@ -165,8 +165,8 @@ func ThreadStateSetRunning() {
     var rc = pthread_mutex_lock(&sStateLock)
     assert(rc == 0)
     
-    assert(sState == .Done)
-    sState = .Running
+    assert(sState == .done)
+    sState = .running
     
     rc = pthread_mutex_unlock(&sStateLock)
     assert(rc == 0)
@@ -179,16 +179,16 @@ func ThreadStatePausedCheck() -> Bool {
     var rc = pthread_mutex_lock(&sStateLock)
     assert(rc == 0)
     
-    assert(sState != .Done)
+    assert(sState != .done)
     
-    while sState == .Paused {
+    while sState == .paused {
         rc = pthread_cond_wait(&sStateChanged, &sStateLock)
         assert(rc == 0)
         wasInterrupted = true
     }
     
     // we must be running or something bad has happened
-    assert(sState == .Running)
+    assert(sState == .running)
     
     rc = pthread_mutex_unlock(&sStateLock)
     assert(rc == 0)
@@ -200,8 +200,8 @@ func ThreadStateSetDone() {
     var rc = pthread_mutex_lock(&sStateLock)
     assert(rc == 0)
     
-    assert(sState != .Done)
-    sState = .Done
+    assert(sState != .done)
+    sState = .done
     
     rc = pthread_mutex_unlock(&sStateLock)
     assert(rc == 0)
@@ -215,54 +215,53 @@ let kMyAudioConverterErr_CannotResumeFromInterruptionError = OSStatus("CANT" as 
 let eofErr: OSStatus = -39 // End of file
 
 struct AudioFileIO {
-    var srcFileID: AudioFileID = nil
+    var srcFileID: AudioFileID? = nil
     var srcFilePos: Int64 = 0
-    var srcBuffer: UnsafeMutablePointer<CChar> = nil
+    var srcBuffer: UnsafeMutablePointer<CChar>? = nil
     var srcBufferSize: UInt32 = 0
     var srcFormat: CAStreamBasicDescription = CAStreamBasicDescription()
     var srcSizePerPacket: UInt32 = 0
     var numPacketsPerRead: UInt32 = 0
-    var packetDescriptions: UnsafeMutablePointer<AudioStreamPacketDescription> = nil
+    var packetDescriptions: UnsafeMutablePointer<AudioStreamPacketDescription>? = nil
 }
-typealias AudioFileIOPtr = UnsafeMutablePointer<AudioFileIO>
 
 //MARK:-
 
 // Input data proc callback
-private func EncoderDataProc(inAudioConverter: AudioConverterRef, _ ioNumberDataPackets: UnsafeMutablePointer<UInt32>, _ ioData: UnsafeMutablePointer<AudioBufferList>, _ outDataPacketDescription: UnsafeMutablePointer<UnsafeMutablePointer<AudioStreamPacketDescription>>, _ inUserData: UnsafeMutablePointer<Void>) -> OSStatus
-{
-    let afio: AudioFileIOPtr = UnsafeMutablePointer(inUserData)
+private let EncoderDataProc: AudioConverterComplexInputDataProc = {inAudioConverter, ioNumberDataPackets, ioData, outDataPacketDescription, inUserData
+in
+    let afio = inUserData!.assumingMemoryBound(to: AudioFileIO.self)
     var error: OSStatus = noErr
     
     // figure out how much to read
-    let maxPackets = afio.memory.srcBufferSize / afio.memory.srcSizePerPacket
-    if ioNumberDataPackets.memory > maxPackets {ioNumberDataPackets.memory = maxPackets}
+    let maxPackets = afio.pointee.srcBufferSize / afio.pointee.srcSizePerPacket
+    if ioNumberDataPackets.pointee > maxPackets {ioNumberDataPackets.pointee = maxPackets}
     
     // read from the file
-    var ioNumBytes: UInt32 = afio.memory.srcBufferSize
+    var ioNumBytes: UInt32 = afio.pointee.srcBufferSize
     //### Deprecated in iOS 8.0
     //    error = AudioFileReadPackets(afio.memory.srcFileID, false, &outNumBytes, afio.memory.packetDescriptions, afio.memory.srcFilePos, ioNumberDataPackets, afio.memory.srcBuffer)
-    error = AudioFileReadPacketData(afio.memory.srcFileID, false, &ioNumBytes, afio.memory.packetDescriptions, afio.memory.srcFilePos, ioNumberDataPackets, afio.memory.srcBuffer)
+    error = AudioFileReadPacketData(afio.pointee.srcFileID!, false, &ioNumBytes, afio.pointee.packetDescriptions, afio.pointee.srcFilePos, ioNumberDataPackets, afio.pointee.srcBuffer)
     if error == eofErr {error = noErr}
     if error != 0 { print("Input Proc Read error: \(error) (\(FourCharCode(error).possibleFourCharString))"); return error }
     
     //print("Input Proc: Read \(ioNumberDataPackets.memory) packets, at position \(afio.memory.srcFilePos) size \(ioNumBytes)")
     
     // advance input file packet position
-    afio.memory.srcFilePos += Int64(ioNumberDataPackets.memory)
+    afio.pointee.srcFilePos += Int64(ioNumberDataPackets.pointee)
     
     // put the data pointer into the buffer list
     let ioDataPtr = UnsafeMutableAudioBufferListPointer(ioData)
-    ioDataPtr[0].mData = UnsafeMutablePointer(afio.memory.srcBuffer)
+    ioDataPtr[0].mData = UnsafeMutableRawPointer(afio.pointee.srcBuffer)
     ioDataPtr[0].mDataByteSize = ioNumBytes
-    ioDataPtr[0].mNumberChannels = afio.memory.srcFormat.mChannelsPerFrame
+    ioDataPtr[0].mNumberChannels = afio.pointee.srcFormat.mChannelsPerFrame
     
     // don't forget the packet descriptions if required
     if outDataPacketDescription != nil {
-        if afio.memory.packetDescriptions != nil {
-            outDataPacketDescription.memory = afio.memory.packetDescriptions
+        if afio.pointee.packetDescriptions != nil {
+            outDataPacketDescription?.pointee = afio.pointee.packetDescriptions!
         } else {
-            outDataPacketDescription.memory = nil
+            outDataPacketDescription?.pointee = nil
         }
     }
     
@@ -276,14 +275,14 @@ private func EncoderDataProc(inAudioConverter: AudioConverterRef, _ ioNumberData
 // If the audio data format has a magic cookie associated with it, you must add this information to anAudio Converter
 // using AudioConverterSetProperty and kAudioConverterDecompressionMagicCookie to appropriately decompress the data
 // http://developer.apple.com/mac/library/qa/qa2001/qa1318.html
-private func ReadCookie(sourceFileID: AudioFileID, _ converter: AudioConverterRef) {
+private func ReadCookie(_ sourceFileID: AudioFileID, _ converter: AudioConverterRef) {
     // grab the cookie from the source file and set it on the converter
     var cookieSize: UInt32 = 0
     var error = AudioFileGetPropertyInfo(sourceFileID, kAudioFilePropertyMagicCookieData, &cookieSize, nil)
     
     // if there is an error here, then the format doesn't have a cookie - this is perfectly fine as some formats do not
     if error == noErr && cookieSize != 0 {
-        let cookie = UnsafeMutablePointer<CChar>.alloc(Int(cookieSize))
+        let cookie = UnsafeMutablePointer<CChar>.allocate(capacity: Int(cookieSize))
         
         error = AudioFileGetProperty(sourceFileID, kAudioFilePropertyMagicCookieData, &cookieSize, cookie)
         if error == noErr {
@@ -293,21 +292,21 @@ private func ReadCookie(sourceFileID: AudioFileID, _ converter: AudioConverterRe
             print("Could not Get kAudioFilePropertyMagicCookieData from source file!")
         }
         
-        cookie.dealloc(Int(cookieSize))
+        cookie.deallocate(capacity: Int(cookieSize))
     }
 }
 
 // Some audio formats have a magic cookie associated with them which is required to decompress audio data
 // When converting audio, a magic cookie may be returned by the Audio Converter so that it may be stored along with
 // the output data -- This is done so that it may then be passed back to the Audio Converter at a later time as required
-private func WriteCookie(converter: AudioConverterRef, _ destinationFileID: AudioFileID) {
+private func WriteCookie(_ converter: AudioConverterRef, _ destinationFileID: AudioFileID) {
     // grab the cookie from the converter and write it to the destinateion file
     var cookieSize: UInt32 = 0
     var error = AudioConverterGetPropertyInfo(converter, kAudioConverterCompressionMagicCookie, &cookieSize, nil)
     
     // if there is an error here, then the format doesn't have a cookie - this is perfectly fine as some formats do not
     guard error == noErr && cookieSize != 0 else {return}
-    var cookie: [CChar] = Array(count: Int(cookieSize), repeatedValue: 0)
+    var cookie: [CChar] = Array(repeating: 0, count: Int(cookieSize))
     
     error = AudioConverterGetProperty(converter, kAudioConverterCompressionMagicCookie, &cookieSize, &cookie)
     guard error == noErr else {
@@ -323,7 +322,7 @@ private func WriteCookie(converter: AudioConverterRef, _ destinationFileID: Audi
 }
 
 // Write output channel layout to destination file
-private func WriteDestinationChannelLayout(converter: AudioConverterRef, _ sourceFileID: AudioFileID, _ destinationFileID: AudioFileID) {
+private func WriteDestinationChannelLayout(_ converter: AudioConverterRef, _ sourceFileID: AudioFileID, _ destinationFileID: AudioFileID) {
     var layoutSize: UInt32 = 0
     var layoutFromConverter = true
     
@@ -336,7 +335,7 @@ private func WriteDestinationChannelLayout(converter: AudioConverterRef, _ sourc
     }
     
     guard error == noErr && layoutSize != 0 else {return}
-    var layout: [CChar] = Array(count: Int(layoutSize), repeatedValue: 0)
+    var layout: [CChar] = Array(repeating: 0, count: Int(layoutSize))
     
     if layoutFromConverter {
         error = AudioConverterGetProperty(converter, kAudioConverterOutputChannelLayout, &layoutSize, &layout)
@@ -359,7 +358,7 @@ private func WriteDestinationChannelLayout(converter: AudioConverterRef, _ sourc
 // Sets the packet table containing information about the number of valid frames in a file and where they begin and end
 // for the file types that support this information.
 // Calling this function makes sure we write out the priming and remainder details to the destination file
-private func WritePacketTableInfo(converter: AudioConverterRef, _ destinationFileID: AudioFileID) {
+private func WritePacketTableInfo(_ converter: AudioConverterRef, _ destinationFileID: AudioFileID) {
     var isWritable: UInt32 = 0
     var dataSize: UInt32 = 0
     var error = AudioFileGetPropertyInfo(destinationFileID, kAudioFilePropertyPacketTableInfo, &dataSize, &isWritable)
@@ -369,7 +368,7 @@ private func WritePacketTableInfo(converter: AudioConverterRef, _ destinationFil
     }
     
     var primeInfo: AudioConverterPrimeInfo = AudioConverterPrimeInfo()
-    dataSize = UInt32(sizeofValue(primeInfo))
+    dataSize = UInt32(MemoryLayout.size(ofValue: primeInfo))
     
     // retrieve the leadingFrames and trailingFrames information from the converter,
     error = AudioConverterGetProperty(converter, kAudioConverterPrimeInfo, &dataSize, &primeInfo)
@@ -383,7 +382,7 @@ private func WritePacketTableInfo(converter: AudioConverterRef, _ destinationFil
     mRemainderFrames, should equal mNumberValidFrames.
     */
     var pti: AudioFilePacketTableInfo = AudioFilePacketTableInfo()
-    dataSize = UInt32(sizeofValue(pti))
+    dataSize = UInt32(MemoryLayout.size(ofValue: pti))
     error = AudioFileGetProperty(destinationFileID, kAudioFilePropertyPacketTableInfo, &dataSize, &pti)
     guard error == noErr else {
         print("Getting kAudioFilePropertyPacketTableInfo error: \(error)")
@@ -397,12 +396,12 @@ private func WritePacketTableInfo(converter: AudioConverterRef, _ destinationFil
     pti.mRemainderFrames = Int32(primeInfo.trailingFrames)
     pti.mNumberValidFrames = Int64(totalFrames) - Int64(pti.mPrimingFrames) - Int64(pti.mRemainderFrames)
     
-    error = AudioFileSetProperty(destinationFileID, kAudioFilePropertyPacketTableInfo, UInt32(sizeofValue(pti)), &pti)
+    error = AudioFileSetProperty(destinationFileID, kAudioFilePropertyPacketTableInfo, UInt32(MemoryLayout.size(ofValue: pti)), &pti)
     guard error == noErr else {
         print("Some audio files can't contain packet table information and that's OK");
         return
     }
-    print("Writing packet table information to destination file: \(sizeofValue(pti))")
+    print("Writing packet table information to destination file: \(MemoryLayout.size(ofValue: pti))")
     print("     Total valid frames: \(pti.mNumberValidFrames)")
     print("         Priming frames: \(pti.mPrimingFrames)")
     print("       Remainder frames: \(pti.mRemainderFrames)")
@@ -410,23 +409,23 @@ private func WritePacketTableInfo(converter: AudioConverterRef, _ destinationFil
 
 //MARK:-
 
-func DoConvertFile(sourceURL: NSURL, _ destinationURL: NSURL, _ outputFormat: OSType, _ outputSampleRate: Float64) -> OSStatus {
-    var sourceFileID: AudioFileID = nil
-    var destinationFileID: AudioFileID = nil
-    var converter: AudioConverterRef = nil
+func DoConvertFile(_ sourceURL: URL, _ destinationURL: URL, _ outputFormat: OSType, _ outputSampleRate: Float64) -> OSStatus {
+    var sourceFileID: AudioFileID? = nil
+    var destinationFileID: AudioFileID? = nil
+    var converter: AudioConverterRef? = nil
     var canResumeFromInterruption = true // we can continue unless told otherwise
     
     var srcFormat: CAStreamBasicDescription = CAStreamBasicDescription()
     var dstFormat: CAStreamBasicDescription = CAStreamBasicDescription()
     var afio = AudioFileIO()
     
-    var outputBuffer: UnsafeMutablePointer<CChar> = nil
-    var outputPacketDescriptions: UnsafeMutablePointer<AudioStreamPacketDescription> = nil
+    var outputBuffer: UnsafeMutablePointer<CChar>? = nil
+    var outputPacketDescriptions: UnsafeMutablePointer<AudioStreamPacketDescription>? = nil
     
     var error = noErr
     
     // in this sample we should never be on the main thread here
-    assert(!NSThread.isMainThread())
+    assert(!Thread.isMainThread)
     
     // transition thread state to kStateRunning before continuing
     ThreadStateSetRunning()
@@ -437,11 +436,11 @@ func DoConvertFile(sourceURL: NSURL, _ destinationURL: NSURL, _ outputFormat: OS
     let theOutputBufSize: UInt32 = 32768
     do {
         // get the source file
-        try XThrowIfError(AudioFileOpenURL(sourceURL, .ReadPermission, 0, &sourceFileID), "AudioFileOpenURL failed")
+        try XThrowIfError(AudioFileOpenURL(sourceURL as CFURL, .readPermission, 0, &sourceFileID), "AudioFileOpenURL failed")
         
         // get the source data format
-        var size = UInt32(sizeofValue(srcFormat))
-        try XThrowIfError(AudioFileGetProperty(sourceFileID, kAudioFilePropertyDataFormat, &size, &srcFormat), "couldn't get source data format")
+        var size = UInt32(MemoryLayout.size(ofValue: srcFormat))
+        try XThrowIfError(AudioFileGetProperty(sourceFileID!, kAudioFilePropertyDataFormat, &size, &srcFormat), "couldn't get source data format")
         
         // setup the output file format
         dstFormat.mSampleRate = (outputSampleRate == 0 ? srcFormat.mSampleRate : outputSampleRate) // set sample rate
@@ -460,7 +459,7 @@ func DoConvertFile(sourceURL: NSURL, _ destinationURL: NSURL, _ outputFormat: OS
             dstFormat.mChannelsPerFrame =  (outputFormat == kAudioFormatiLBC ? 1 : srcFormat.numberChannels) // for iLBC num channels must be 1
             
             // use AudioFormat API to fill out the rest of the description
-            size = UInt32(sizeofValue(dstFormat))
+            size = UInt32(MemoryLayout.size(ofValue: dstFormat))
             try XThrowIfError(AudioFormatGetProperty(kAudioFormatProperty_FormatInfo, 0, nil, &size, &dstFormat), "couldn't create destination data format")
         }
         
@@ -472,14 +471,14 @@ func DoConvertFile(sourceURL: NSURL, _ destinationURL: NSURL, _ outputFormat: OS
         try XThrowIfError(AudioConverterNew(&srcFormat, &dstFormat, &converter), "AudioConverterNew failed!")
         
         // if the source has a cookie, get it and set it on the Audio Converter
-        ReadCookie(sourceFileID, converter)
+        ReadCookie(sourceFileID!, converter!)
         
         // get the actual formats back from the Audio Converter
-        size = UInt32(sizeofValue(srcFormat))
-        try XThrowIfError(AudioConverterGetProperty(converter, kAudioConverterCurrentInputStreamDescription, &size, &srcFormat), "AudioConverterGetProperty kAudioConverterCurrentInputStreamDescription failed!")
+        size = UInt32(MemoryLayout.size(ofValue: srcFormat))
+        try XThrowIfError(AudioConverterGetProperty(converter!, kAudioConverterCurrentInputStreamDescription, &size, &srcFormat), "AudioConverterGetProperty kAudioConverterCurrentInputStreamDescription failed!")
         
-        size = UInt32(sizeofValue(dstFormat))
-        try XThrowIfError(AudioConverterGetProperty(converter, kAudioConverterCurrentOutputStreamDescription, &size, &dstFormat), "AudioConverterGetProperty kAudioConverterCurrentOutputStreamDescription failed!")
+        size = UInt32(MemoryLayout.size(ofValue: dstFormat))
+        try XThrowIfError(AudioConverterGetProperty(converter!, kAudioConverterCurrentOutputStreamDescription, &size, &dstFormat), "AudioConverterGetProperty kAudioConverterCurrentOutputStreamDescription failed!")
         
         print("Formats returned from AudioConverter:")
         print("              Source format: ", terminator: ""); srcFormat.print()
@@ -494,7 +493,7 @@ func DoConvertFile(sourceURL: NSURL, _ destinationURL: NSURL, _ outputFormat: OS
         //    and if you have stereo or more, you can multiply that number by the number of channels.
         if dstFormat.mFormatID == kAudioFormatMPEG4AAC {
             var outputBitRate: UInt32 = 64000; // 64kbs
-            var propSize = UInt32(sizeofValue(outputBitRate))
+            var propSize = UInt32(MemoryLayout.size(ofValue: outputBitRate))
             
             if dstFormat.mSampleRate >= 44100 {
                 outputBitRate = 192000 // 192kbs
@@ -503,11 +502,11 @@ func DoConvertFile(sourceURL: NSURL, _ destinationURL: NSURL, _ outputFormat: OS
             }
             
             // set the bit rate depending on the samplerate chosen
-            try XThrowIfError(AudioConverterSetProperty(converter, kAudioConverterEncodeBitRate, propSize, &outputBitRate),
+            try XThrowIfError(AudioConverterSetProperty(converter!, kAudioConverterEncodeBitRate, propSize, &outputBitRate),
                 "AudioConverterSetProperty kAudioConverterEncodeBitRate failed!")
             
             // get it back and print it out
-            AudioConverterGetProperty(converter, kAudioConverterEncodeBitRate, &propSize, &outputBitRate)
+            AudioConverterGetProperty(converter!, kAudioConverterEncodeBitRate, &propSize, &outputBitRate)
             print("AAC Encode Bitrate: \(outputBitRate)")
         }
         
@@ -516,8 +515,8 @@ func DoConvertFile(sourceURL: NSURL, _ destinationURL: NSURL, _ outputFormat: OS
         // there's no clear reason to prefer construction time, interruption time, or potential resumption time but we prefer
         // construction time since it means less code to execute during or after interruption time
         var canResume: UInt32 = 0
-        size = UInt32(sizeofValue(canResume))
-        error = AudioConverterGetProperty(converter, kAudioConverterPropertyCanResumeFromInterruption, &size, &canResume)
+        size = UInt32(MemoryLayout.size(ofValue: canResume))
+        error = AudioConverterGetProperty(converter!, kAudioConverterPropertyCanResumeFromInterruption, &size, &canResume)
         if error == noErr {
             // we recieved a valid return value from the GetProperty call
             // if the property's value is 1, then the codec CAN resume work following an interruption
@@ -541,12 +540,12 @@ func DoConvertFile(sourceURL: NSURL, _ destinationURL: NSURL, _ outputFormat: OS
         }
         
         // create the destination file
-        try XThrowIfError(AudioFileCreateWithURL(destinationURL, kAudioFileCAFType, &dstFormat, .EraseFile, &destinationFileID), "AudioFileCreateWithURL failed!")
+        try XThrowIfError(AudioFileCreateWithURL(destinationURL as CFURL, kAudioFileCAFType, &dstFormat, .eraseFile, &destinationFileID), "AudioFileCreateWithURL failed!")
         
         // set up source buffers and data proc info struct
         afio.srcFileID = sourceFileID
         afio.srcBufferSize = 32768
-        afio.srcBuffer = UnsafeMutablePointer<CChar>.alloc(Int(afio.srcBufferSize))
+        afio.srcBuffer = UnsafeMutablePointer<CChar>.allocate(capacity: Int(afio.srcBufferSize))
         afio.srcFilePos = 0
         afio.srcFormat = srcFormat
         
@@ -555,14 +554,14 @@ func DoConvertFile(sourceURL: NSURL, _ destinationURL: NSURL, _ outputFormat: OS
             // use kAudioFilePropertyPacketSizeUpperBound which returns the theoretical maximum packet size
             // in the file (without actually scanning the whole file to find the largest packet,
             // as may happen with kAudioFilePropertyMaximumPacketSize)
-            size = UInt32(sizeofValue(afio.srcSizePerPacket))
-            try XThrowIfError(AudioFileGetProperty(sourceFileID, kAudioFilePropertyPacketSizeUpperBound, &size, &afio.srcSizePerPacket), "AudioFileGetProperty kAudioFilePropertyPacketSizeUpperBound failed!")
+            size = UInt32(MemoryLayout.size(ofValue: afio.srcSizePerPacket))
+            try XThrowIfError(AudioFileGetProperty(sourceFileID!, kAudioFilePropertyPacketSizeUpperBound, &size, &afio.srcSizePerPacket), "AudioFileGetProperty kAudioFilePropertyPacketSizeUpperBound failed!")
             
             // how many packets can we read for our buffer size?
             afio.numPacketsPerRead = afio.srcBufferSize / afio.srcSizePerPacket
             
             // allocate memory for the PacketDescription structures describing the layout of each packet
-            afio.packetDescriptions = UnsafeMutablePointer<AudioStreamPacketDescription>.alloc(Int(afio.numPacketsPerRead))
+            afio.packetDescriptions = UnsafeMutablePointer<AudioStreamPacketDescription>.allocate(capacity: Int(afio.numPacketsPerRead))
         } else {
             // CBR source format
             afio.srcSizePerPacket = srcFormat.mBytesPerPacket
@@ -572,24 +571,24 @@ func DoConvertFile(sourceURL: NSURL, _ destinationURL: NSURL, _ outputFormat: OS
         
         // set up output buffers
         outputSizePerPacket = dstFormat.mBytesPerPacket // this will be non-zero if the format is CBR
-        outputBuffer = UnsafeMutablePointer<CChar>.alloc(Int(theOutputBufSize))
+        outputBuffer = UnsafeMutablePointer<CChar>.allocate(capacity: Int(theOutputBufSize))
         
         if outputSizePerPacket == 0 {
             // if the destination format is VBR, we need to get max size per packet from the converter
-            size = UInt32(sizeofValue(outputSizePerPacket))
-            try XThrowIfError(AudioConverterGetProperty(converter, kAudioConverterPropertyMaximumOutputPacketSize, &size, &outputSizePerPacket), "AudioConverterGetProperty kAudioConverterPropertyMaximumOutputPacketSize failed!")
+            size = UInt32(MemoryLayout.size(ofValue: outputSizePerPacket))
+            try XThrowIfError(AudioConverterGetProperty(converter!, kAudioConverterPropertyMaximumOutputPacketSize, &size, &outputSizePerPacket), "AudioConverterGetProperty kAudioConverterPropertyMaximumOutputPacketSize failed!")
             
             // allocate memory for the PacketDescription structures describing the layout of each packet
-            outputPacketDescriptions = UnsafeMutablePointer<AudioStreamPacketDescription>.alloc(Int(theOutputBufSize / outputSizePerPacket))
+            outputPacketDescriptions = UnsafeMutablePointer<AudioStreamPacketDescription>.allocate(capacity: Int(theOutputBufSize / outputSizePerPacket))
         }
         let numOutputPackets = theOutputBufSize / outputSizePerPacket
         
         // if the destination format has a cookie, get it and set it on the output file
-        WriteCookie(converter, destinationFileID)
+        WriteCookie(converter!, destinationFileID!)
         
         // write destination channel layout
         if srcFormat.mChannelsPerFrame > 2 {
-            WriteDestinationChannelLayout(converter, sourceFileID, destinationFileID)
+            WriteDestinationChannelLayout(converter!, sourceFileID!, destinationFileID!)
         }
         
         var totalOutputFrames = 0 // used for debgging printf
@@ -621,7 +620,7 @@ func DoConvertFile(sourceURL: NSURL, _ destinationURL: NSURL, _ outputFormat: OS
             // convert data
             var ioOutputDataPackets = numOutputPackets
             print("AudioConverterFillComplexBuffer...")
-            error = AudioConverterFillComplexBuffer(converter, EncoderDataProc, &afio, &ioOutputDataPackets, &fillBufList, outputPacketDescriptions)
+            error = AudioConverterFillComplexBuffer(converter!, EncoderDataProc, &afio, &ioOutputDataPackets, &fillBufList, outputPacketDescriptions)
             // if interrupted in the process of the conversion call, we must handle the error appropriately
             if error != 0 {
                 if error == kAudioConverterErr_HardwareInUse {
@@ -640,7 +639,7 @@ func DoConvertFile(sourceURL: NSURL, _ destinationURL: NSURL, _ outputFormat: OS
             if error == noErr {
                 // write to output file
                 let inNumBytes = fillBufList.mBuffers.mDataByteSize
-                try XThrowIfError(AudioFileWritePackets(destinationFileID, false, inNumBytes, outputPacketDescriptions, outputFilePos, &ioOutputDataPackets, outputBuffer), "AudioFileWritePackets failed!")
+                try XThrowIfError(AudioFileWritePackets(destinationFileID!, false, inNumBytes, outputPacketDescriptions, outputFilePos, &ioOutputDataPackets, outputBuffer!), "AudioFileWritePackets failed!")
                 
                 print("Convert Output: Write \(ioOutputDataPackets) packets at position \(outputFilePos), size: \(inNumBytes)")
                 
@@ -653,7 +652,7 @@ func DoConvertFile(sourceURL: NSURL, _ destinationURL: NSURL, _ outputFormat: OS
                 } else if outputPacketDescriptions != nil {
                     // variable frames per packet require doing this for each packet (adding up the number of sample frames of data in each packet)
                     for i in 0..<Int(ioOutputDataPackets) {
-                        totalOutputFrames += Int(outputPacketDescriptions[i].mVariableFramesInPacket)
+                        totalOutputFrames += Int((outputPacketDescriptions?[i].mVariableFramesInPacket)!)
                     }
                 }
             }
@@ -664,28 +663,28 @@ func DoConvertFile(sourceURL: NSURL, _ destinationURL: NSURL, _ outputFormat: OS
             if dstFormat.mBitsPerChannel == 0 {
                 // our output frame count should jive with
                 print("Total number of output frames counted: \(totalOutputFrames)")
-                WritePacketTableInfo(converter, destinationFileID)
+                WritePacketTableInfo(converter!, destinationFileID!)
             }
             
             // write the cookie again - sometimes codecs will update cookies at the end of a conversion
-            WriteCookie(converter, destinationFileID)
+            WriteCookie(converter!, destinationFileID!)
         }
     } catch let e as CAXException {
-        print("Error: \(e.mOperation) (\(e.formatError()))\n", toStream: &stderr)
+        print("Error: \(e.mOperation) (\(e.formatError()))\n", to: &stderr)
         error = e.mError
     } catch _ {
         fatalError()
     }
     
     // cleanup
-    if converter != nil {AudioConverterDispose(converter)}
-    if destinationFileID != nil {AudioFileClose(destinationFileID)}
-    if sourceFileID != nil {AudioFileClose(sourceFileID)}
+    if converter != nil {AudioConverterDispose(converter!)}
+    if destinationFileID != nil {AudioFileClose(destinationFileID!)}
+    if sourceFileID != nil {AudioFileClose(sourceFileID!)}
     
-    if afio.srcBuffer != nil {afio.srcBuffer.dealloc(Int(afio.srcBufferSize))}
-    if afio.packetDescriptions != nil {afio.packetDescriptions.dealloc(Int(afio.numPacketsPerRead))}
-    if outputBuffer != nil {outputBuffer.dealloc(Int(theOutputBufSize))}
-    if outputPacketDescriptions != nil {outputPacketDescriptions.dealloc(Int(theOutputBufSize / outputSizePerPacket))}
+    if afio.srcBuffer != nil {afio.srcBuffer?.deallocate(capacity: Int(afio.srcBufferSize))}
+    if afio.packetDescriptions != nil {afio.packetDescriptions?.deallocate(capacity: Int(afio.numPacketsPerRead))}
+    if outputBuffer != nil {outputBuffer?.deallocate(capacity: Int(theOutputBufSize))}
+    if outputPacketDescriptions != nil {outputPacketDescriptions?.deallocate(capacity: Int(theOutputBufSize / outputSizePerPacket))}
     
     // transition thread state to kStateDone before continuing
     ThreadStateSetDone()

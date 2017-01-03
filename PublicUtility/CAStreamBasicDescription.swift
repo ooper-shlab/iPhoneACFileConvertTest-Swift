@@ -68,10 +68,10 @@ typealias CAStreamBasicDescription = AudioStreamBasicDescription
 extension AudioStreamBasicDescription {
     
     enum CommonPCMFormat: Int {
-        case Other = 0
-        case Float32 = 1
-        case Int16 = 2
-        case Fixed824 = 3
+        case other = 0
+        case float32 = 1
+        case int16 = 2
+        case fixed824 = 3
     }
     
     //	Construction/Destruction
@@ -94,13 +94,13 @@ extension AudioStreamBasicDescription {
         mReserved = 0
         
         switch pcmf {
-        case .Float32:
+        case .float32:
             wordsize = 4
             mFormatFlags |= AudioFormatFlags(kAudioFormatFlagIsFloat)
-        case .Int16:
+        case .int16:
             wordsize = 2
             mFormatFlags |= AudioFormatFlags(kAudioFormatFlagIsSignedInteger)
-        case .Fixed824:
+        case .fixed824:
             wordsize = 4
             mFormatFlags |= AudioFormatFlags(kAudioFormatFlagIsSignedInteger | (24 << kLinearPCMFormatFlagsSampleFractionShift))
         default:
@@ -158,19 +158,19 @@ extension AudioStreamBasicDescription {
         self.print(&stdout)
     }
     
-    func print<T: OutputStreamType>(inout output: T) {
+    func print<T: TextOutputStream>(_ output: inout T) {
         self.printFormat(&output, "", "AudioStreamBasicDescription:")
     }
     
-    func printFormat<T: OutputStreamType>(inout output: T, _ indent: String, _ name: String) {
-        Swift.print("\(indent)\(name) \(description)", toStream: &output)
+    func printFormat<T: TextOutputStream>(_ output: inout T, _ indent: String, _ name: String) {
+        Swift.print("\(indent)\(name) \(description)", to: &output)
     }
 
-    func printFormat2<T: OutputStreamType>(inout output: T, _ indent: String, _ name: String) { // no trailing newline
-        Swift.print("\(indent)\(name) \(description)", terminator: "", toStream: &output)
+    func printFormat2<T: TextOutputStream>(_ output: inout T, _ indent: String, _ name: String) { // no trailing newline
+        Swift.print("\(indent)\(name) \(description)", terminator: "", to: &output)
     }
     
-    static func print(inDesc: AudioStreamBasicDescription) {
+    static func print(_ inDesc: AudioStreamBasicDescription) {
         let desc = CAStreamBasicDescription(desc: inDesc)
         desc.print()
     }

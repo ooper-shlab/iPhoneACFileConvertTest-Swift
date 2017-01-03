@@ -65,16 +65,16 @@ class ACFileConvertAppDelegate: NSObject, UIApplicationDelegate {
     @IBOutlet var navigationController: UINavigationController!
     @IBOutlet var myViewController: MyViewController!
     
-    @objc func handleInterruption(notification: NSNotification) {
+    @objc func handleInterruption(_ notification: Notification) {
         let theInterruptionType = notification.userInfo![AVAudioSessionInterruptionTypeKey] as! UInt
         
-        NSLog("Session interrupted > --- %@ ---\n", theInterruptionType == AVAudioSessionInterruptionType.Began.rawValue ? "Begin Interruption" : "End Interruption")
+        NSLog("Session interrupted > --- %@ ---\n", theInterruptionType == AVAudioSessionInterruptionType.began.rawValue ? "Begin Interruption" : "End Interruption")
         
-        if theInterruptionType == AVAudioSessionInterruptionType.Began.rawValue {
+        if theInterruptionType == AVAudioSessionInterruptionType.began.rawValue {
             ThreadStateBeginInterruption()
         }
         
-        if theInterruptionType == AVAudioSessionInterruptionType.Ended.rawValue {
+        if theInterruptionType == AVAudioSessionInterruptionType.ended.rawValue {
             // make sure we are again the active session
             do {
                 try AVAudioSession.sharedInstance().setActive(true)
@@ -89,24 +89,24 @@ class ACFileConvertAppDelegate: NSObject, UIApplicationDelegate {
     
     //MARK: -Audio Session Route Change Notification
     
-    @objc func handleRouteChange(notification: NSNotification) {
+    @objc func handleRouteChange(_ notification: Notification) {
         let reasonValue = notification.userInfo![AVAudioSessionRouteChangeReasonKey] as! UInt
         let routeDescription = notification.userInfo![AVAudioSessionRouteChangePreviousRouteKey] as! AVAudioSessionRouteDescription
         
         NSLog("Route change:")
         switch reasonValue {
-        case AVAudioSessionRouteChangeReason.NewDeviceAvailable.rawValue:
+        case AVAudioSessionRouteChangeReason.newDeviceAvailable.rawValue:
             NSLog("     NewDeviceAvailable")
-        case AVAudioSessionRouteChangeReason.OldDeviceUnavailable.rawValue:
+        case AVAudioSessionRouteChangeReason.oldDeviceUnavailable.rawValue:
             NSLog("     OldDeviceUnavailable")
-        case AVAudioSessionRouteChangeReason.CategoryChange.rawValue:
+        case AVAudioSessionRouteChangeReason.categoryChange.rawValue:
             NSLog("     CategoryChange")
             NSLog(" New Category: %@", AVAudioSession.sharedInstance().category)
-        case AVAudioSessionRouteChangeReason.Override.rawValue:
+        case AVAudioSessionRouteChangeReason.override.rawValue:
             NSLog("     Override")
-        case AVAudioSessionRouteChangeReason.WakeFromSleep.rawValue:
+        case AVAudioSessionRouteChangeReason.wakeFromSleep.rawValue:
             NSLog("     WakeFromSleep")
-        case AVAudioSessionRouteChangeReason.NoSuitableRouteForCategory.rawValue:
+        case AVAudioSessionRouteChangeReason.noSuitableRouteForCategory.rawValue:
             NSLog("     NoSuitableRouteForCategory")
         default:
             NSLog("     ReasonUnknown")
@@ -119,7 +119,7 @@ class ACFileConvertAppDelegate: NSObject, UIApplicationDelegate {
     //MARK: -
     //MARK: Application lifecycle
     
-    func applicationDidFinishLaunching(application: UIApplication) {
+    func applicationDidFinishLaunching(_ application: UIApplication) {
         
         // Override point for customization after application launch
         self.window?.rootViewController = navigationController
@@ -140,15 +140,15 @@ class ACFileConvertAppDelegate: NSObject, UIApplicationDelegate {
             }
             
             // add interruption handler
-            NSNotificationCenter.defaultCenter().addObserver(self,
+            NotificationCenter.default.addObserver(self,
                 selector: #selector(ACFileConvertAppDelegate.handleInterruption(_:)),
-                name: AVAudioSessionInterruptionNotification,
+                name: NSNotification.Name.AVAudioSessionInterruption,
                 object: sessionInstance)
             
             // we don't do anything special in the route change notification
-            NSNotificationCenter.defaultCenter().addObserver(self,
+            NotificationCenter.default.addObserver(self,
                 selector: #selector(ACFileConvertAppDelegate.handleRouteChange(_:)),
-                name: AVAudioSessionRouteChangeNotification,
+                name: NSNotification.Name.AVAudioSessionRouteChange,
                 object: sessionInstance)
             
             // the session must be active for offline conversion
@@ -159,7 +159,7 @@ class ACFileConvertAppDelegate: NSObject, UIApplicationDelegate {
             }
             
         } catch let e as CAXException {
-            print("Error: \(e.mOperation) (\(e.formatError()))\n", toStream: &stderr)
+            print("Error: \(e.mOperation) (\(e.formatError()))\n", to: &stderr)
             print("You probably want to fix this before continuing!")
         } catch _ {}
         
@@ -167,17 +167,17 @@ class ACFileConvertAppDelegate: NSObject, UIApplicationDelegate {
     
     deinit {
         
-        NSNotificationCenter.defaultCenter().removeObserver(self,
-            name: AVAudioSessionInterruptionNotification,
+        NotificationCenter.default.removeObserver(self,
+            name: NSNotification.Name.AVAudioSessionInterruption,
             object: AVAudioSession.sharedInstance())
         
-        NSNotificationCenter.defaultCenter().removeObserver(self,
-            name: AVAudioSessionRouteChangeNotification,
+        NotificationCenter.default.removeObserver(self,
+            name: NSNotification.Name.AVAudioSessionRouteChange,
             object: AVAudioSession.sharedInstance())
         
     }
     
-    func applicationDidEnterBackground(application: UIApplication) {
+    func applicationDidEnterBackground(_ application: UIApplication) {
         /*
         Use this method to release shared resources, save user data, invalidate timers, and store enough application state information to restore your application to its current state in case it is terminated later.
         If your application supports background execution, called instead of applicationWillTerminate: when the user quits.
@@ -187,7 +187,7 @@ class ACFileConvertAppDelegate: NSObject, UIApplicationDelegate {
     }
     
     
-    func applicationWillEnterForeground(application: UIApplication) {
+    func applicationWillEnterForeground(_ application: UIApplication) {
         /*
         Called as part of  transition from the background to the inactive state: here you can undo many of the changes made on entering the background.
         */
@@ -195,7 +195,7 @@ class ACFileConvertAppDelegate: NSObject, UIApplicationDelegate {
         print("applicationWillEnterForeground")
     }
     
-    func applicationWillResignActive(application: UIApplication) {
+    func applicationWillResignActive(_ application: UIApplication) {
         /*
         Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
         Use this method to pause ongoing tasks, disable timers, and throttle down OpenGL ES frame rates. Games should use this method to pause the game.
@@ -204,7 +204,7 @@ class ACFileConvertAppDelegate: NSObject, UIApplicationDelegate {
         print("applicationWillResignActive")
     }
     
-    func applicationDidBecomeActive(application: UIApplication) {
+    func applicationDidBecomeActive(_ application: UIApplication) {
         /*
         Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
         */

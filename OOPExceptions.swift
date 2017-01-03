@@ -37,9 +37,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import Foundation
 
-public class OOPThrowable: CustomStringConvertible, ErrorType {
-    public var _domain: String = "OOPThrowable"
-    public var _code: Int = 0
+open class OOPThrowable: CustomStringConvertible, Error {
+    open var _domain: String = "OOPThrowable"
+    open var _code: Int = 0
     
     private(set) var message: String
     var localizedMessage: String {return message}
@@ -61,14 +61,14 @@ public class OOPThrowable: CustomStringConvertible, ErrorType {
         self.line = line
     }
     
-    func initCause(cause: OOPThrowable) {
+    func initCause(_ cause: OOPThrowable) {
         if self.cause != nil {
             fatalError("cause already set")
         }
         self.cause = cause
     }
 
-    public var description: String {
+    open var description: String {
         return "\(message) in \(function) of \(file):\(line)"
     }
     //We don't have stack trace facility for now.

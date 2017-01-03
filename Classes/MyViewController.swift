@@ -64,8 +64,8 @@ class MyViewController: UIViewController, AVAudioPlayerDelegate {
     @IBOutlet private var fileInfo: UILabel!
     
     private var destinationFilePath: String!
-    private var sourceURL: NSURL!
-    private var destinationURL: NSURL!
+    private var sourceURL: URL!
+    private var destinationURL: URL!
     private var outputFormat: OSType = 0
     private var sampleRate: Float64 = 0.0
     
@@ -92,16 +92,16 @@ class MyViewController: UIViewController, AVAudioPlayerDelegate {
         var encoderSpecifier: UInt32 = kAudioFormatMPEG4AAC
         var size: UInt32 = 0
         
-        var result = AudioFormatGetPropertyInfo(kAudioFormatProperty_Encoders, UInt32(sizeofValue(encoderSpecifier)), &encoderSpecifier, &size)
+        var result = AudioFormatGetPropertyInfo(kAudioFormatProperty_Encoders, UInt32(MemoryLayout.size(ofValue: encoderSpecifier)), &encoderSpecifier, &size)
         guard result == 0 else {
             print("AudioFormatGetPropertyInfo kAudioFormatProperty_Encoders result \(result) \(FourCharCode(result).possibleFourCharString)")
             return false
         }
         
-        let numEncoders = Int(size) / sizeof(AudioClassDescription)
-        var encoderDescriptions: [AudioClassDescription] = Array(count: numEncoders, repeatedValue: AudioClassDescription())
+        let numEncoders = Int(size) / MemoryLayout<AudioClassDescription>.size
+        var encoderDescriptions: [AudioClassDescription] = Array(repeating: AudioClassDescription(), count: numEncoders)
         
-        result = AudioFormatGetProperty(kAudioFormatProperty_Encoders, UInt32(sizeofValue(encoderSpecifier)), &encoderSpecifier, &size, &encoderDescriptions)
+        result = AudioFormatGetProperty(kAudioFormatProperty_Encoders, UInt32(MemoryLayout.size(ofValue: encoderSpecifier)), &encoderSpecifier, &size, &encoderDescriptions)
         guard result == 0 else {
             print("AudioFormatGetProperty kAudioFormatProperty_Encoders result \(result) \(FourCharCode(result).possibleFourCharString)")
             return false
@@ -128,27 +128,27 @@ class MyViewController: UIViewController, AVAudioPlayerDelegate {
         return isAvailable
     }
     
-    private func updateFormatInfo(inLabel: UILabel, _ inFileURL: NSURL) {
-        var fileID: AudioFileID = nil
+    private func updateFormatInfo(_ inLabel: UILabel, _ inFileURL: URL) {
+        var fileID: AudioFileID? = nil
         
-        var result = AudioFileOpenURL(inFileURL, .ReadPermission, 0, &fileID)
+        var result = AudioFileOpenURL(inFileURL as CFURL, .readPermission, 0, &fileID)
         guard result == noErr else {
             print("AudioFileOpenURL failed! result \(result) \(FourCharCode(result).possibleFourCharString)")
             return
         }
         var asbd: CAStreamBasicDescription = CAStreamBasicDescription()
-        var size = UInt32(strideofValue(asbd))
-        result = AudioFileGetProperty(fileID, kAudioFilePropertyDataFormat, &size, &asbd)
+        var size = UInt32(MemoryLayout.stride(ofValue: asbd))
+        result = AudioFileGetProperty(fileID!, kAudioFilePropertyDataFormat, &size, &asbd)
         guard result == noErr else {
             print("AudioFileGetProperty kAudioFilePropertyDataFormat result \(result) \(FourCharCode(result).possibleFourCharString)")
             return
         }
-        let lastPathComponent = inFileURL.lastPathComponent ?? ""
+        let lastPathComponent = inFileURL.lastPathComponent
         let formatID = asbd.mFormatID.fourCharString
         
         inLabel.text = String(format: "\(lastPathComponent) \(formatID) %6.0f Hz (\(asbd.numberChannels) ch.)", asbd.mSampleRate)
         
-        AudioFileClose(fileID)
+        AudioFileClose(fileID!)
     }
     
     //MARK:-
@@ -156,39 +156,39 @@ class MyViewController: UIViewController, AVAudioPlayerDelegate {
     override func viewDidLoad() {
         super.viewDidLoad()
         // create the URLs we'll use for source and destination
-        sourceURL = NSBundle.mainBundle().URLForResource("sourcePCM", withExtension: "aif")!
+        sourceURL = Bundle.main.url(forResource: "sourcePCM", withExtension: "aif")!
         
-        let URLs = NSFileManager.defaultManager().URLsForDirectory(.DocumentDirectory, inDomains: .UserDomainMask)
+        let URLs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
         let documentsDirectoryURL = URLs[0]
-        destinationURL = documentsDirectoryURL.URLByAppendingPathComponent("output.caf")
+        destinationURL = documentsDirectoryURL.appendingPathComponent("output.caf")
         print(destinationURL)
         destinationFilePath = destinationURL.path
         
         // load up the info text
-        let infoSourceURL = NSBundle.mainBundle().URLForResource("info", withExtension: "html")!
-        let infoText = try! String(contentsOfURL: infoSourceURL, encoding: NSUTF8StringEncoding)
+        let infoSourceURL = Bundle.main.url(forResource: "info", withExtension: "html")!
+        let infoText = try! String(contentsOf: infoSourceURL, encoding: String.Encoding.utf8)
         self.webView.loadHTMLString(infoText, baseURL: nil)
-        self.webView.backgroundColor = UIColor.whiteColor()
+        self.webView.backgroundColor = UIColor.white
         
         // set up start button
-        let greenImage = UIImage(named: "green_button.png")!.resizableImageWithCapInsets(UIEdgeInsets(top: 12.0, left: 12.0, bottom: 12.0, right: 12.0))
-        let redImage = UIImage(named: "red_button.png")!.resizableImageWithCapInsets(UIEdgeInsets(top: 12.0, left: 12.0, bottom: 12.0, right: 12.0))
+        let greenImage = UIImage(named: "green_button.png")!.resizableImage(withCapInsets: UIEdgeInsets(top: 12.0, left: 12.0, bottom: 12.0, right: 12.0))
+        let redImage = UIImage(named: "red_button.png")!.resizableImage(withCapInsets: UIEdgeInsets(top: 12.0, left: 12.0, bottom: 12.0, right: 12.0))
         
-        startButton.setBackgroundImage(greenImage, forState: .Normal)
-        startButton.setBackgroundImage(redImage, forState: .Disabled)
+        startButton.setBackgroundImage(greenImage, for: UIControlState())
+        startButton.setBackgroundImage(redImage, for: .disabled)
         
         // add the subview
         self.view.addSubview(contentView)
         
         // add our custom flip buttons as the nav bars custom right view
-        let infoButton = UIButton(type: .InfoLight)
-        infoButton.addTarget(self, action: #selector(MyViewController.flipAction(_:)), forControlEvents: .TouchUpInside)
+        let infoButton = UIButton(type: .infoLight)
+        infoButton.addTarget(self, action: #selector(MyViewController.flipAction(_:)), for: .touchUpInside)
         
         flipButton = UIBarButtonItem(customView: infoButton)
         self.navigationItem.rightBarButtonItem = flipButton
         
         // create our done button as the nav bar's custom right view for the flipped view (used later)
-        doneButton = UIBarButtonItem(barButtonSystemItem: .Done, target: self, action: #selector(MyViewController.flipAction(_:)))
+        doneButton = UIBarButtonItem(barButtonSystemItem: .done, target: self, action: #selector(MyViewController.flipAction(_:)))
         
         // default output format
         // sample rate of 0 indicates source file sample rate
@@ -197,11 +197,11 @@ class MyViewController: UIViewController, AVAudioPlayerDelegate {
         
         // can we encode to AAC?
         if isAACEncoderAvailable {
-            self.outputFormatSelector.setEnabled(true, forSegmentAtIndex: 0)
+            self.outputFormatSelector.setEnabled(true, forSegmentAt: 0)
         } else {
             // even though not enabled in IB, this segment will still be enabled
             // if not specifically turned off here which we'll assume is a bug
-            self.outputFormatSelector.setEnabled(false, forSegmentAtIndex: 0)
+            self.outputFormatSelector.setEnabled(false, forSegmentAt: 0)
         }
         
         updateFormatInfo(fileInfo, sourceURL)
@@ -220,12 +220,12 @@ class MyViewController: UIViewController, AVAudioPlayerDelegate {
     
     @objc func flipAction(_: AnyObject) {
         UIView.setAnimationDelegate(self)
-        UIView.setAnimationDidStopSelector(nil)
+        UIView.setAnimationDidStop(nil)
         UIView.beginAnimations(nil, context: nil)
         UIView.setAnimationDuration(kTransitionDuration)
         
-        UIView.setAnimationTransition(self.contentView.superview != nil ? .FlipFromLeft : .FlipFromRight,
-            forView: self.view,
+        UIView.setAnimationTransition(self.contentView.superview != nil ? .flipFromLeft : .flipFromRight,
+            for: self.view,
             cache: true)
         
         if self.instructionsView.superview != nil {
@@ -255,47 +255,47 @@ class MyViewController: UIViewController, AVAudioPlayerDelegate {
             return
         }
         
-        self.startButton.setTitle("Converting...", forState: .Disabled)
-        startButton.enabled = false
+        self.startButton.setTitle("Converting...", for: .disabled)
+        startButton.isEnabled = false
         
         self.activityIndicator.startAnimating()
         
         // run audio file code in a background thread
-        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0)) {
+        DispatchQueue.global(qos: .default).async {
             self.convertAudio()
         }
     }
     
-    @IBAction func segmentedControllerValueChanged(sender: UISegmentedControl) {
+    @IBAction func segmentedControllerValueChanged(_ sender: UISegmentedControl) {
         switch sender.tag {
         case 0:
             switch sender.selectedSegmentIndex {
             case 0:
                 outputFormat = kAudioFormatMPEG4AAC
-                self.outputSampleRateSelector.setEnabled(true, forSegmentAtIndex: 0)
-                self.outputSampleRateSelector.setEnabled(true, forSegmentAtIndex: 1)
-                self.outputSampleRateSelector.setEnabled(true, forSegmentAtIndex: 2)
-                self.outputSampleRateSelector.setEnabled(true, forSegmentAtIndex: 3)
+                self.outputSampleRateSelector.setEnabled(true, forSegmentAt: 0)
+                self.outputSampleRateSelector.setEnabled(true, forSegmentAt: 1)
+                self.outputSampleRateSelector.setEnabled(true, forSegmentAt: 2)
+                self.outputSampleRateSelector.setEnabled(true, forSegmentAt: 3)
             case 1:
                 outputFormat = kAudioFormatAppleIMA4
-                self.outputSampleRateSelector.setEnabled(true, forSegmentAtIndex: 0)
-                self.outputSampleRateSelector.setEnabled(true, forSegmentAtIndex: 1)
-                self.outputSampleRateSelector.setEnabled(true, forSegmentAtIndex: 2)
-                self.outputSampleRateSelector.setEnabled(true, forSegmentAtIndex: 3)
+                self.outputSampleRateSelector.setEnabled(true, forSegmentAt: 0)
+                self.outputSampleRateSelector.setEnabled(true, forSegmentAt: 1)
+                self.outputSampleRateSelector.setEnabled(true, forSegmentAt: 2)
+                self.outputSampleRateSelector.setEnabled(true, forSegmentAt: 3)
             case 2:
                 // iLBC sample rate is 8K
                 outputFormat = kAudioFormatiLBC
                 sampleRate = 8000.0
                 self.outputSampleRateSelector.selectedSegmentIndex = 2
-                self.outputSampleRateSelector.setEnabled(false, forSegmentAtIndex: 0)
-                self.outputSampleRateSelector.setEnabled(false, forSegmentAtIndex: 1)
-                self.outputSampleRateSelector.setEnabled(false, forSegmentAtIndex: 3)
+                self.outputSampleRateSelector.setEnabled(false, forSegmentAt: 0)
+                self.outputSampleRateSelector.setEnabled(false, forSegmentAt: 1)
+                self.outputSampleRateSelector.setEnabled(false, forSegmentAt: 3)
             case 3:
                 outputFormat = kAudioFormatAppleLossless
-                self.outputSampleRateSelector.setEnabled(true, forSegmentAtIndex: 0)
-                self.outputSampleRateSelector.setEnabled(true, forSegmentAtIndex: 1)
-                self.outputSampleRateSelector.setEnabled(true, forSegmentAtIndex: 2)
-                self.outputSampleRateSelector.setEnabled(true, forSegmentAtIndex: 3)
+                self.outputSampleRateSelector.setEnabled(true, forSegmentAt: 0)
+                self.outputSampleRateSelector.setEnabled(true, forSegmentAt: 1)
+                self.outputSampleRateSelector.setEnabled(true, forSegmentAt: 2)
+                self.outputSampleRateSelector.setEnabled(true, forSegmentAt: 3)
             default:
                 break
             }
@@ -320,23 +320,23 @@ class MyViewController: UIViewController, AVAudioPlayerDelegate {
     //MARK:- AVAudioPlayer
     
     private func updateUI() {
-        startButton.enabled = true
+        startButton.isEnabled = true
         updateFormatInfo(fileInfo, sourceURL)
     }
     
-    func audioPlayerDecodeErrorDidOccur(player: AVAudioPlayer, error: NSError?) {
-        NSLog("audioPlayerDecodeErrorDidOccur %@", error!.localizedDescription ?? "")
+    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        NSLog("audioPlayerDecodeErrorDidOccur %@", error?.localizedDescription ?? "")
         self.audioPlayerDidFinishPlaying(player, successfully: false)
     }
     
-    func audioPlayerBeginInterruption(player: AVAudioPlayer) {
+    func audioPlayerBeginInterruption(_ player: AVAudioPlayer) {
         print("Session interrupted! --- audioPlayerBeginInterruption ---")
         
         // if the player was interrupted during playback we don't continue
         self.audioPlayerDidFinishPlaying(player, successfully: true)
     }
     
-    func audioPlayerDidFinishPlaying(player: AVAudioPlayer, successfully flag: Bool) {
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         if !flag {NSLog("Playback finished unsuccessfully!")}
         
         print("audioPlayerDidFinishPlaying")
@@ -352,7 +352,7 @@ class MyViewController: UIViewController, AVAudioPlayerDelegate {
         print("playAudio")
         
         updateFormatInfo(fileInfo, destinationURL)
-        self.startButton.setTitle("Playing Output File...", forState: .Disabled)
+        self.startButton.setTitle("Playing Output File...", for: .disabled)
         
         // set category back to something that will allow us to play audio since AVAudioSessionCategoryAudioProcessing will not
         do {
@@ -367,7 +367,7 @@ class MyViewController: UIViewController, AVAudioPlayerDelegate {
         
         // play the result
         do {
-            player = try AVAudioPlayer(contentsOfURL: destinationURL)
+            player = try AVAudioPlayer(contentsOf: destinationURL)
             player?.delegate = self
             player?.play()
         } catch let error as NSError {
@@ -391,19 +391,19 @@ class MyViewController: UIViewController, AVAudioPlayerDelegate {
             
             if error != 0 {
                 // delete output file if it exists since an error was returned during the conversion process
-                if NSFileManager.defaultManager().fileExistsAtPath(destinationFilePath) {
+                if FileManager.default.fileExists(atPath: destinationFilePath) {
                     do {
-                        try NSFileManager.defaultManager().removeItemAtPath(destinationFilePath)
+                        try FileManager.default.removeItem(atPath: destinationFilePath)
                     } catch {}
                 }
                 
                 print("DoConvertFile failed! \(error)")
-                dispatch_async(dispatch_get_main_queue()) {
+                DispatchQueue.main.async {
                     self.activityIndicator.stopAnimating() //###
                     self.updateUI()
                 }
             } else {
-                dispatch_async(dispatch_get_main_queue()) {
+                DispatchQueue.main.async {
                     self.activityIndicator.stopAnimating() //###
                     self.playAudio()
                 }

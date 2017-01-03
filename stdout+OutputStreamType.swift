@@ -8,10 +8,10 @@
 
 import Foundation
 
-extension UnsafeMutablePointer: OutputStreamType {
-    public func write(string: String) {
-        if Memory.self is FILE.Type {
-            fputs(string, UnsafeMutablePointer<FILE>(self))
+extension UnsafeMutablePointer: TextOutputStream {
+    public func write(_ string: String) {
+        if Pointee.self is FILE.Type {
+            fputs(string, UnsafeMutableRawPointer(self).assumingMemoryBound(to: FILE.self))
         }
     }
 }
