@@ -662,7 +662,7 @@ class AudioFileConvertOperation: Operation {
     
     // MARK: Notification Handlers.
     
-    func handleAudioSessionInterruptionNotification(_ notification: NSNotification) {
+    @objc func handleAudioSessionInterruptionNotification(_ notification: NSNotification) {
         let interruptionType = AVAudioSessionInterruptionType(rawValue: notification.userInfo![AVAudioSessionInterruptionTypeKey] as! UInt)!
         
         print("Session interrupted > --- \(interruptionType == .began ? "Begin Interruption" : "End Interruption") ---")
