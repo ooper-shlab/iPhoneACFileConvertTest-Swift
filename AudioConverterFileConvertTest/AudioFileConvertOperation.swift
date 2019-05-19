@@ -132,12 +132,12 @@ class AudioFileConvertOperation: Operation {
         
         super.init()
         
-        NotificationCenter.default.addObserver(self, selector: #selector(handleAudioSessionInterruptionNotification), name: .AVAudioSessionInterruption, object: AVAudioSession.sharedInstance())
+        NotificationCenter.default.addObserver(self, selector: #selector(handleAudioSessionInterruptionNotification), name: AVAudioSession.interruptionNotification, object: AVAudioSession.sharedInstance())
         
     }
     
     deinit {
-        NotificationCenter.default.removeObserver(self, name: .AVAudioSessionInterruption, object: AVAudioSession.sharedInstance())
+        NotificationCenter.default.removeObserver(self, name: AVAudioSession.interruptionNotification, object: AVAudioSession.sharedInstance())
     }
     
     override func main() {
@@ -319,7 +319,7 @@ class AudioFileConvertOperation: Operation {
             afio.srcBuffer = .allocate(capacity: Int(afio.srcBufferSize))
             afio.srcFilePos = 0
             afio.srcFormat = sourceFormat
-            defer {afio.srcBuffer?.deallocate(capacity: Int(afio.srcBufferSize))}
+            defer {afio.srcBuffer?.deallocate()}
             
             if sourceFormat.mBytesPerPacket == 0 {
                 /*
@@ -344,13 +344,13 @@ class AudioFileConvertOperation: Operation {
                 afio.numPacketsPerRead = afio.srcBufferSize / afio.srcSizePerPacket
                 afio.packetDescriptions = nil
             }
-            defer {afio.packetDescriptions?.deallocate(capacity: Int(afio.numPacketsPerRead))}
+            defer {afio.packetDescriptions?.deallocate()}
             
             // Set up output buffers
             var outputSizePerPacket = destinationFormat.mBytesPerPacket
             var theOutputBufferSize: UInt32 = 32768
             let outputBuffer = UnsafeMutablePointer<CChar>.allocate(capacity: Int(theOutputBufferSize))
-            defer {outputBuffer.deallocate(capacity: Int(theOutputBufferSize))}
+            defer {outputBuffer.deallocate()}
             
             if outputSizePerPacket == 0 {
                 // if the destination format is VBR, we need to get max size per packet from the converter
@@ -364,7 +364,7 @@ class AudioFileConvertOperation: Operation {
                 // allocate memory for the PacketDescription structures describing the layout of each packet
                 outputPacketDescriptions = .allocate(capacity: Int(theOutputBufferSize / outputSizePerPacket))
             }
-            defer {outputPacketDescriptions?.deallocate(capacity: Int(theOutputBufferSize / outputSizePerPacket))}
+            defer {outputPacketDescriptions?.deallocate()}
             
             let numberOutputPackets = theOutputBufferSize / outputSizePerPacket
             
@@ -663,7 +663,7 @@ class AudioFileConvertOperation: Operation {
     // MARK: Notification Handlers.
     
     @objc func handleAudioSessionInterruptionNotification(_ notification: NSNotification) {
-        let interruptionType = AVAudioSessionInterruptionType(rawValue: notification.userInfo![AVAudioSessionInterruptionTypeKey] as! UInt)!
+        let interruptionType = AVAudioSession.InterruptionType(rawValue: notification.userInfo![AVAudioSessionInterruptionTypeKey] as! UInt)!
         
         print("Session interrupted > --- \(interruptionType == .began ? "Begin Interruption" : "End Interruption") ---")
         

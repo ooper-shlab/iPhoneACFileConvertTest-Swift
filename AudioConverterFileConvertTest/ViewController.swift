@@ -78,12 +78,12 @@ class ViewController: UIViewController, AudioFileConvertOperationDelegate, AVAud
         self.removeDestinationFileIfNeeded()
         
         // Add Notification observer for audio interuptions while playing back audio.
-        NotificationCenter.default.addObserver(self, selector: #selector(handleAudioSessionInterruptionNotification), name: .AVAudioSessionInterruption, object: AVAudioSession.sharedInstance())
+        NotificationCenter.default.addObserver(self, selector: #selector(handleAudioSessionInterruptionNotification), name: AVAudioSession.interruptionNotification, object: AVAudioSession.sharedInstance())
         
     }
     
     deinit {
-        NotificationCenter.default.removeObserver(self, name: .AVAudioSessionInterruption, object: AVAudioSession.sharedInstance())
+        NotificationCenter.default.removeObserver(self, name: AVAudioSession.interruptionNotification, object: AVAudioSession.sharedInstance())
     }
     
     // MARK: Target-Action

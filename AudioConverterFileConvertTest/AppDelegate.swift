@@ -22,7 +22,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     
     var window: UIWindow?
     
-    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplicationLaunchOptionsKey : Any]? = nil) -> Bool {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
         
         do {
             
@@ -30,12 +30,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             let sessionInstance = AVAudioSession.sharedInstance()
             
             // our default category -- we change this for conversion and playback appropriately
-            try sessionInstance.setCategory(AVAudioSessionCategoryPlayback)
+            if #available(iOS 10.0, *) {
+                try sessionInstance.setCategory(.playback, mode: .default)
+            } else {
+                try sessionInstance.setCategory(.playback)
+            }
             
             // we don't do anything special in the route change notification
             NotificationCenter.default.addObserver(self,
                                                    selector: #selector(handleAudioSessionRouteChangeNotification),
-                                                   name: .AVAudioSessionRouteChange,
+                                                   name: AVAudioSession.routeChangeNotification,
                                                    object: sessionInstance)
             
             // the session must be active for offline conversion
@@ -48,7 +52,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // MARK: Notification Handler.
     
     @objc private func handleAudioSessionRouteChangeNotification(_ notification: Notification) {
-        let reasonValue = AVAudioSessionRouteChangeReason(rawValue: notification.userInfo![AVAudioSessionRouteChangeReasonKey]! as! UInt) ?? .unknown
+        let reasonValue = AVAudioSession.RouteChangeReason(rawValue: notification.userInfo![AVAudioSessionRouteChangeReasonKey] as! UInt) ?? .unknown
         
         let routeDescription = notification.userInfo![AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription ?? AVAudioSessionRouteDescription()
         
@@ -71,6 +75,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             NSLog("     RouteConfigurationChange")
         case .unknown:
             NSLog("     ReasonUnknown")
+        @unknown default:
+            NSLog("     Unknown: \(reasonValue.rawValue)")
         }
         
         NSLog("Previous route:\n")

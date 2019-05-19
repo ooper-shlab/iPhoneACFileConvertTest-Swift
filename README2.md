@@ -14,7 +14,7 @@ You should not contact to Apple or SHLab(jp) about any faults caused by my trans
 ===========================================================================
 BUILD REQUIREMENTS:
 
-Xcode 9.1, iOS SDK 11
+Xcode 10.2.1, iOS SDK 12
 
 ===========================================================================
 RUNTIME REQUIREMENTS:
